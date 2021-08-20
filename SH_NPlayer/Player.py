@@ -8,7 +8,7 @@ class Player(object):
     
     counter = 0         # used to count instances
     
-    def __init__(self, pop_size, action='C', reward=4.0, fitness=0.0, income = 4, rich = False, strategyType= 'Everything') :
+    def __init__(self, pop_size, action='C', reward=4.0, fitness=0.0, income = 4.0, rich = False, strategyType= 'Everything') :
         """ Create a new Player with action, reward, fitness """
         self.__income = income
         self.__rich = rich
@@ -19,7 +19,9 @@ class Player(object):
         self.__nextAction = None
         self.__hurt = False
         self.__strategyType = strategyType
-        type(self).counter += 1    
+        self.__moralFactor = random.uniform(0, 1)
+        self.__previousContribution = 0
+        type(self).counter += 1
         self.__uniqueId =  type(self).counter
     
     def __str__(self) :
@@ -31,7 +33,11 @@ class Player(object):
         return self.__nextAction
     
     def set_strategyType(self, new_strategy):
-        self.__strategyType = new_strategy
+        self.set_hurt(False)
+        if isinstance(new_strategy, str):
+            self.__strategyType = new_strategy
+        else:
+            self.__strategyType = new_strategy[0]
         #self.__strInstance.set_strategyType(new_strategy)
 
     def get_strategyType(self):
@@ -51,7 +57,10 @@ class Player(object):
 
     def set_hurt(self, pain) :
         self.__hurt = pain
-        
+
+    def set_previous_Contribution(self, contribution):
+        self.__previousContribution = contribution
+
     def set_rounds(self, rounds):
         self.__rounds = rounds
          
@@ -61,7 +70,16 @@ class Player(object):
         
     def get_reward(self) :
         return self.__reward
-             
+
+    def get_moral_factor(self, target):
+        if self.__previousContribution != 0:
+            contributed = target/self.__previousContribution
+        else:
+            contributed = 0
+        if contributed < 1 and contributed < self.__moralFactor:
+            return 1 - self.__moralFactor - contributed
+        else:
+            return 1
 # Every time the play ground change the real action of player
 # it needs to generate a new possiable next action for use 
     def set_action(self, new_action) :

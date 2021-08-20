@@ -4,7 +4,7 @@ from __future__ import division
 from Player import Player
 from random import shuffle
 import random
-#import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt
 #from mpl_toolkits.mplot3d import Axes3D
 import sys
 import math
@@ -41,6 +41,14 @@ class game(object):
         self.punishment_amount = 0.5
         self.previous_average = 0
         self.rounds = 10
+        self.failures = 0
+        self.success = 0
+
+    def set_failures(self, fails):
+        self.failures = fails
+
+    def set_success(self, success):
+        self.success = success
 
     def set_pop_update_rule(self, new_update_rule):
         self.pop_update_rule = new_update_rule
@@ -97,10 +105,10 @@ class game(object):
         defector_count = 0
         for r in range(0,pop_size) :
             if random.random() <= 0.5:
-                player = Player(pop_size, None, reward=4.0, fitness=0.0, income = 4, rich = True, strategyType= np.random.choice(strategies, 1))
+                player = Player(pop_size, None, reward=4.0, fitness=0.0, income = 4.0, rich = True, strategyType= np.random.choice(strategies))
                 rich_group.append(player)
             else :                                
-                player = Player(pop_size, None, reward=2.0, fitness=0.0, income = 2, rich = False, strategyType= np.random.choice(strategies, 1))
+                player = Player(pop_size, None, reward=2.0, fitness=0.0, income = 2.0, rich = False, strategyType= np.random.choice(strategies))
                 poor_group.append(player)
             population.append(player)
         cooperator_proportion = (cooperator_count / pop_size)
@@ -146,28 +154,43 @@ class game(object):
         target = self.target
         for x in range(self.rounds):
             for player in group:
+                contribution = player.get_reward()
                 if player.get_strategyType() == "Nothing":
-                    continue
-                if player.get_strategyType() == "Everything":
-                    target -= player.get_reward()
+                    player.set_previous_Contribution(0)
+                elif player.get_strategyType() == "Everything":
+                    target -= contribution
+                    player.set_previous_Contribution(contribution)
                     player.set_reward(0)
-                if player.get_strategyType() == "FairShare":
-                    target -= player.get_reward()/self.pop_size
-                    player.set_reward(player.get_reward()/self.pop_size)
-                if player.get_strategyType() == "Tit-for-Tat":
+                elif player.get_strategyType() == "FairShare":
+                    target -= contribution//self.pop_size
+                    player.set_previous_Contribution(contribution//self.pop_size)
+                    player.set_reward(player.get_reward() - (contribution//self.pop_size))
+                elif player.get_strategyType() == "Tit-for-Tat":
                     if self.previous_average is None:
-                        target -= player.get_reward() / self.pop_size
-                        player.set_reward(player.get_reward() / self.pop_size)
+                        target -= contribution // self.pop_size
+                        player.set_previous_Contribution(player.get_reward() // self.pop_size)
+                        player.set_reward(player.get_reward() - (contribution//self.pop_size))
                     else:
-                        target -= self.previous_average
-                        player.set_reward(self.previous_average)
-                if player.get_strategyType() == "Revenge":
+                        target -= min(self.previous_average, player.get_reward())
+                        player.set_previous_Contribution(min(self.previous_average, player.get_reward()))
+                        player.set_reward(player.get_reward() - min(self.previous_average, player.get_reward()))
+                elif player.get_strategyType() == "Revenge":
                     if not player.get_hurt():
-                        target -= player.get_reward()/self.pop_size
-                        player.set_reward(player.get_reward() / self.pop_size)
+                        target -= contribution//self.pop_size
+                        player.set_reward(player.get_reward() - (contribution//self.pop_size))
+                    else:
+                        player.set_previous_Contribution(0)
+                else:
+                    print("this is not a strategy")
+                    print(type(player.get_strategyType()))
+                    print(player.get_strategyType()[0])
+                    print(player.get_strategyType())
+
+                    sys.exit(1)
             probability_of_punishment = self.probability_of_punishment
             punishment = 1-min(max(self.punishment_amount, 0), 1)
             if target > 0:
+                self.failures += 1
                 probability_of_punishment += self.risk_function(self.risk_function(target/self.target))
                 probability_of_punishment = min(max(probability_of_punishment, 0), 1)
                 self.probability_of_punishment += 0.05
@@ -176,11 +199,17 @@ class game(object):
                     player.set_hurt(True)
                     result = np.random.choice([True, False], 1,
                                               p=[probability_of_punishment, 1 - probability_of_punishment])
-                    if result and 0 <= punishment <= 1:
+                    if result and 0 <= punishment < 1 and player.get_moral_factor(self.target) < 1:
+                        player.set_reward((player.get_reward() + player.get_income()) * max(punishment-player.get_moral_factor(self.target), 0))
+                    elif result and 0 <= punishment < 1:
                         player.set_reward((player.get_reward() + player.get_income()) * punishment)
                     else:
-                        player.set_reward(player.get_reward() + player.get_income())
+                        if player.get_moral_factor(self.target) < 1:
+                            player.set_reward((player.get_reward() + player.get_income())*player.get_moral_factor(self.target))
+                        else:
+                            player.set_reward(player.get_reward() + player.get_income())
             else:
+                self.success += 1
                 self.probability_of_punishment -= 0.05
                 self.punishment_amount -= 0.05
                 for player in group:
@@ -231,37 +260,42 @@ class game(object):
         return act
         
     def update_population(self, groups):
+        all_strategies = ["Nothing", "Everything", "FairShare", "Tit-for-Tat", "Revenge"]
         for group in groups:
-            top_1 = -1
-            top_2 = -1
-            bottom_1 = math.inf
-            bottom_2 = math.inf
+            top_1 = None
+            top_2 = None
+            bottom_1 = None
+            bottom_2 = None
             strategy_1 = None
             strategy_2 = None
             for player in group:
-                if player.get_reward() > top_1:
+                if top_1 is None or player.get_reward() > top_1:
                     top_2 = top_1
-                    strategy_2 = strategy_1
+                    strategy_2 = np.array([strategy_1]).tolist()
                     top_1 = player.get_reward()
-                    strategy_1 = player.get_strategyType()
-                elif player.get_reward() > top_2:
+                    strategy_1 = np.array([player.get_strategyType()]).tolist()
+                elif top_2 is None or player.get_reward() > top_2:
                     top_2 = player.get_reward()
-                    strategy_2 = player.get_strategyType()
-                if player.get_reward() < bottom_1:
+                    strategy_2 = np.array([player.get_strategyType()]).tolist()
+                if bottom_1 is None or player.get_reward() < bottom_1:
                     bottom_2 = bottom_1
                     bottom_1 = player.get_reward()
-                elif player.get_reward() > bottom_2:
+                elif bottom_2 is None or player.get_reward() > bottom_2:
                     bottom_2 = player.get_reward()
             x = 0
             while x < 2:
                 for player in group:
                     if player.get_reward() == bottom_2:
                         bottom_2 = None
-                        player.set_strategyType(strategy_2)
+                        random_strategy = [random.choice(all_strategies)]
+                        player.set_strategyType(np.random.choice([strategy_2[0], random_strategy[0]],
+                                              p=[1-self.M, self.M]))
                         break
                     if player.get_reward() == bottom_1:
                         bottom_1 = None
-                        player.set_strategyType(strategy_1)
+                        random_strategy = [random.choice(all_strategies)]
+                        player.set_strategyType(np.random.choice([strategy_1[0], random_strategy[0]],
+                                              p=[1-self.M, self.M]))
                         break
                 x += 1
 
@@ -444,7 +478,7 @@ if __name__ == '__main__':
     # (and not at first and last, already done specifically)
     #snapshot_time_list = [time_list[i] for i in range(1, len(time_list)-1, len(time_list)/10)]
 
-    games = game(10, None, None, None, None, None, None, 20, "Linear")
+    games = game(5, None, None, None, None, 0.03, None, 20, "Linear")
     groups = games.init_population()
     string = ""
     for player in games.get_population():
@@ -453,17 +487,62 @@ if __name__ == '__main__':
     f = open("test.txt", "w")
     f.write(string)
     f.close()
-    for x in range(1000):
+    wealth = []
+    money = []
+    proportion = []
+    strategies = []
+    for player in games.get_population():
+        string = string + str(player)
+        money.append(player.get_reward())
+        strategies.append(player.get_strategyType())
+    proportion.append(strategies)
+    wealth.append(money)
+    successes = []
+    for x in range(10):
         games.play_game(groups)
         games.update_population(groups)
         string = ""
+        money = []
+        strategies = []
         for player in games.get_population():
             string = string + str(player)
+            money.append(player.get_reward())
+            strategies.append(player.get_strategyType())
+        successes.append([games.failures, games.success])
+        games.set_success(0)
+        games.set_failures(0)
+        proportion.append(strategies)
+        wealth.append(money)
         string = string + "\n"
         f = open("test.txt", "a")
         f.write(string)
         f.close()
-
+    for y in range(5):
+        line = []
+        for x in range(10):
+            line.append(wealth[x][y])
+        plt.plot(range(10), line, label = "player" + str(y))
+    plt.legend()
+    plt.xlabel('Number of rounds')
+    plt.ylabel('Wealth')
+    plt.savefig('wealth.png')
+    plt.figure()
+    all_strategies = ["Nothing", "Everything", "FairShare", "Tit-for-Tat", "Revenge"]
+    for strat in all_strategies:
+        line = []
+        for y in range(10):
+            line.append(proportion[y].count(strat))
+        plt.plot(range(10), line, label= strat)
+    plt.legend()
+    plt.xlabel('Number of rounds')
+    plt.ylabel('Number of players using the strategy')
+    plt.savefig('strategy.png')
+    plt.figure()
+    print(successes)
+    print([x[0] for x in successes])
+    plt.bar(np.arange(10), [x[0] for x in successes], color = 'r', width = 0.25 )
+    plt.bar(np.arange(10)+0.25,[y[1] for y in successes], color = 'g', width = 0.25)
+    plt.savefig('games.png')
 
 
     # param_list = [] # list of parameter tuples: build list then run each
