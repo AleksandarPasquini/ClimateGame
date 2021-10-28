@@ -1,9 +1,5 @@
-import math
-import random
 
-"""
-Based off 
-"""
+# Attribution Information: This code was developed off work done by Michael Kirley
 
 class Player(object):
     
@@ -40,7 +36,6 @@ class Player(object):
             self.__strategyType = new_strategy
         else:
             self.__strategyType = new_strategy[0]
-        #self.__strInstance.set_strategyType(new_strategy)
 
     def get_strategyType(self):
         return self.__strategyType
@@ -50,12 +45,6 @@ class Player(object):
 
     def get_previous_reward(self):
         return self.previous_reward
-    
-    def set_fitness(self, new_fitness) :
-        self.__fitness = self.__fitness + new_fitness
-        
-    def get_fitness(self) :
-        return self.__fitness
 
     def get_hurt(self) :
         return self.__hurt
@@ -79,21 +68,18 @@ class Player(object):
     def get_reward(self) :
         return self.__reward
 
+    def get_rich(self):
+        return self.__rich
+
     def get_morals(self):
         return self.__moralFactor
 
     def get_moral_factor(self, target):
         contributed = self.__previousContribution/target
         if contributed < 1 and contributed < self.__moralFactor:
-            return self.__moralFactor
+            return self.__moralFactor - contributed
         else:
             return 0
-# Every time the play ground change the real action of player
-# it needs to generate a new possiable next action for use 
-    def set_action(self, new_action) :
-        self.__action = new_action
-        #self.__strInstance.set_currentAction(new_action)
-        #self.set_nextAction()
         
     def get_action(self) :
         return self.__action

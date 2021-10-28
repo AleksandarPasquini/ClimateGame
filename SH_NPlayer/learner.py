@@ -1,7 +1,8 @@
 import numpy as np
 import nashpy
 import copy
-import random
+# Attribution Information: This code was developed off work done by tocom242242
+# https://github.com/tocom242242/nash_q_learning
 
 class NashQLearner(object):
     def __init__(self,
@@ -32,9 +33,8 @@ class NashQLearner(object):
         self.reward_history = []
         self.action_history = []
         self.previous_reward = 0
-        # q values (my and opponent)
         self.q, self.q_o = {}, {}
-        self.n = {}  # counter
+        self.n = {}
 
         self._check_new_state(ini_state)
 
@@ -43,6 +43,9 @@ class NashQLearner(object):
          return  str(self.id) + ': (' + str(self.__rich) + ',' \
          + str(self.__reward) + ',' + str(self.__strategyType)  + ')'
 
+    def get_rich(self):
+        return self.__rich
+    
     def get_id(self):
         return self.id
 
@@ -111,6 +114,7 @@ class NashQLearner(object):
 
         return action_id
 
+    # Observe next state and learn the rewards of the state
     def observe(
             self,
             state="nonstate",
@@ -118,9 +122,6 @@ class NashQLearner(object):
             reward_o=None,
             opponent_action=0,
             learning=True):
-        """
-            observe next state and learn
-        """
         self.prev_state = copy.deepcopy(self.state)
         self.state = state
         self._check_new_state(state)
@@ -151,35 +152,19 @@ class NashQLearner(object):
 
         return updated_q
 
+    # Compute the nash q value for that state
     def _compute_nashq(self, state, pi, pi_o, q):
         """
             compute nash q value
         """
         nashq = 0
-        for action1 in self.actions:
-            for action2 in self.actions:
-                nashq += pi[action1] * pi_o[action2] * \
-                         q[state][(action1, action2)]
-
-        # action1 = np.argmax(pi)
-        # for action2 in self.actions:
-        #     nashq += pi[action1] * pi_o[action2] * \
-        #         q[state][(action1, action2)]
-
-        # action1 = np.argmax(pi)
-        # action2 = np.argmax(pi_o)
-        # nashq += pi[action1] * pi_o[action2] * q[state][(action1, action2)]
-
-        # action1 = np.argmax(pi)
-        # action2 = np.argmax(pi_o)
-        # nashq += q[state][(action1, action2)]
+        action1 = np.argmax(pi)
+        action2 = np.argmax(pi_o)
+        nashq += q[state][(action1, action2)]
 
         return nashq
-
+    # Compute the equilibria value for that state
     def _compute_pi(self, state):
-        """
-            compute pi (nash)
-        """
         q_1, q_2 = [], []
         for action1 in self.actions:
             row_q_1, row_q_2 = [], []
@@ -193,8 +178,6 @@ class NashQLearner(object):
 
         game = nashpy.Game(q_1, q_2)
         equilibria = game.support_enumeration()
-        #equilibria = game.lemke_howson_enumeration()
-        # equilibria = game.vertex_enumeration()
         pi_list = list(equilibria)
 
         pi = None
@@ -218,11 +201,8 @@ class NashQLearner(object):
             pi = (pi1, pi2)
 
         return pi[0], pi[1]
-
+    # If the state is new state, add a new row to the q table
     def _check_new_state(self, state):
-        """
-            if the state is new state, extend q table
-        """
 
         if state not in self.q.keys():
             self.q[state] = {}
